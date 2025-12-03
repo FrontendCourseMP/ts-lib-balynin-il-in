@@ -45,7 +45,16 @@ export class StringValidator {
    * Если длина value меньше - вернуть rule.errorMessage или дефолтное сообщение
    */
   private static validateMinLength(value: string, rule: ValidationRule): string | null {
-    // todo
+    if (Validator.isEmpty(value)) {
+      return null;
+    }
+
+    const minLength = Number(rule.value);
+
+    if (value.length < minLength) {
+      return rule.errorMessage || `Minimum length is ${minLength} characters`;
+    }
+
     return null;
   }
 
@@ -88,7 +97,16 @@ export class StringValidator {
    * Реализуй проверку через regexp
    */
   private static validateEmail(value: string, rule: ValidationRule): string | null {
-    // todo
+    if (Validator.isEmpty(value)) {
+      return null;
+    }
+
+    const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+    if (!emailPattern.test(value)) {
+      return rule.errorMessage || 'Invalid email address';
+    }
+
     return null;
   }
 }

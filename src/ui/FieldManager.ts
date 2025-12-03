@@ -44,8 +44,19 @@ export class FieldManager {
    * 3. Собрать value тех, у кого .checked === true
    */
   private getCheckboxValue(element: HTMLInputElement): string[] {
-    // todo
-    return [];
+    const name = element.name;
+    const checkboxes = this.form.querySelectorAll<HTMLInputElement>(
+      `input[type="checkbox"][name="${name}"]`
+    );
+    const values: string[] = [];
+
+    checkboxes.forEach(checkbox => {
+      if (checkbox.checked) {
+        values.push(checkbox.value);
+      }
+    });
+
+    return values;
   }
 
   /**
@@ -53,8 +64,12 @@ export class FieldManager {
    * Вернуть значение выбранной или null
    */
   private getRadioValue(element: HTMLInputElement): string | null {
-    // todo
-    return null;
+    const name = element.name;
+    const checked = this.form.querySelector<HTMLInputElement>(
+      `input[type="radio"][name="${name}"]:checked`
+    );
+
+    return checked ? checked.value : null;
   }
 
   /**
