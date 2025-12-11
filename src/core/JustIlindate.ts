@@ -108,9 +108,132 @@ export class JustIlindate {
     element: HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement
   ): ValidationRule[] {
     const rules: ValidationRule[] = [];
-    //TODO: здесь должны быть логика, которая считывает стандартные HTML5 атрибуты
-    // (типа `required`, `minlength`, `type="email"`) и
-    // автоматически преобразует их в объекты правил (`ValidationRule[]`) для поля.
+    // required атрибут
+    if (element.hasAttribute("required")) {
+      rules.push({
+        validator: (value: FieldValue) => !this.isValueEmpty(value),
+        errorMessage: errorMessages.required,
+      });
+    }
+
+    // Для input элементов с специфичными типами
+    if (element instanceof HTMLInputElement) {
+      const type = element.type.toLowerCase();
+
+      // email тип
+      if (type === "email") {
+        rules.push({
+          validator: (value: FieldValue) => {
+            if (this.isValueEmpty(value)) return true;
+            return validators.email(value);
+          },
+          errorMessage: errorMessages.email || "Пожалуйста, введите корректный email",
+        });
+      }
+
+      // url тип
+      if (type === "url") {
+        rules.push({
+          validator: (value: FieldValue) => {
+            if (this.isValueEmpty(value)) return true;
+            return validators.url(value);
+          },
+          errorMessage: errorMessages.url || "Пожалуйста, введите корректный URL",
+        });
+      }
+
+      // number тип
+      if (type === "number") {
+        // min атрибут
+        if (element.hasAttribute("min")) {
+          const min = parseFloat(element.getAttribute("min")!);
+          rules.push({
+            validator: (value: FieldValue) => {
+              if (this.isValueEmpty(value)) return true;
+              const num = parseFloat(String(value));
+              return !isNaN(num) && num >= min;
+            },
+            errorMessage: errorMessages.min || `Минимальное значение: ${min}`,
+          });
+        }
+
+        // max атрибут
+        if (element.hasAttribute("max")) {
+          const max = parseFloat(element.getAttribute("max")!);
+          rules.push({
+            validator: (value: FieldValue) => {
+              if (this.isValueEmpty(value)) return true;
+              const num = parseFloat(String(value));
+              return !isNaN(num) && num <= max;
+            },
+            errorMessage: errorMessages.max || `Максимальное значение: ${max}`,
+          });
+        }
+      }
+
+      // date, time типы тоже поддерживают min/max
+      if (["date", "time", "datetime-local"].includes(type)) {
+        if (element.hasAttribute("min")) {
+          const min = element.getAttribute("min")!;
+          rules.push({
+            validator: (value: FieldValue) => {
+              if (this.isValueEmpty(value)) return true;
+              return String(value) >= min;
+            },
+            errorMessage: errorMessages.min || `Минимальное значение: ${min}`,
+          });
+        }
+
+        if (element.hasAttribute("max")) {
+          const max = element.getAttribute("max")!;
+          rules.push({
+            validator: (value: FieldValue) => {
+              if (this.isValueEmpty(value)) return true;
+              return String(value) <= max;
+            },
+            errorMessage: errorMessages.max || `Максимальное значение: ${max}`,
+          });
+        }
+      }
+    }
+
+    // minlength атрибут (для input/textarea)
+    if ((element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement) && 
+        element.hasAttribute("minlength")) {
+      const minlength = parseInt(element.getAttribute("minlength")!, 10);
+      rules.push({
+        validator: (value: FieldValue) => {
+          if (this.isValueEmpty(value)) return true;
+          return String(value).length >= minlength;
+        },
+        errorMessage: errorMessages.minlength || `Минимум ${minlength} символов`,
+      });
+    }
+
+    // maxlength атрибут (для input/textarea)
+    if ((element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement) && 
+        element.hasAttribute("maxlength")) {
+      const maxlength = parseInt(element.getAttribute("maxlength")!, 10);
+      rules.push({
+        validator: (value: FieldValue) => {
+          return String(value).length <= maxlength;
+        },
+        errorMessage: errorMessages.maxlength || `Максимум ${maxlength} символов`,
+      });
+    }
+
+    // pattern атрибут (для input элементов)
+    if (element instanceof HTMLInputElement && element.hasAttribute("pattern")) {
+      const pattern = element.getAttribute("pattern")!;
+      const regex = new RegExp(`^${pattern}$`);
+      rules.push({
+        validator: (value: FieldValue) => {
+          if (this.isValueEmpty(value)) return true;
+          return regex.test(String(value));
+        },
+        errorMessage: errorMessages.pattern || "Значение не соответствует требуемому формату",
+      });
+    }
     return rules;
   }
 
@@ -255,9 +378,15 @@ export class JustIlindate {
   }
 
   private clearErrors(fieldState: FieldState): void {
-    //TODO: здесь должна быть логика, которая очищает контейнер ошибок, скрывает его и
-    // добавляет/удаляет классы успеха/ошибки с поля ввода,
-    // когда поле становится валидным.
+    // Очищаем контейнер ошибок
+    fieldState.errorContainer.innerHTML = "";
+    fieldState.errorContainer.style.display = "none";
+
+    // Удаляем класс ошибки
+    fieldState.element.classList.remove(this.options.errorClass);
+    
+    // Добавляем класс успеха
+    fieldState.element.classList.add(this.options.successClass);
   }
 
   public validate(): ValidationResult {
