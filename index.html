@@ -3,18 +3,310 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>ts-val</title>
+    <title>JustIlindate - Библиотека валидации форм</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+        min-height: 100vh;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        padding: 20px;
+      }
+
+      .container {
+        background: white;
+        padding: 40px;
+        border-radius: 12px;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        max-width: 600px;
+        width: 100%;
+      }
+
+      h1 {
+        color: #333;
+        margin-bottom: 10px;
+        font-size: 28px;
+      }
+
+      .subtitle {
+        color: #666;
+        margin-bottom: 30px;
+        font-size: 14px;
+      }
+
+      .form-group {
+        margin-bottom: 25px;
+      }
+
+      label {
+        display: block;
+        margin-bottom: 8px;
+        color: #333;
+        font-weight: 600;
+        font-size: 14px;
+      }
+
+      input[type="text"],
+      input[type="email"],
+      input[type="password"],
+      input[type="number"],
+      input[type="url"],
+      select {
+        width: 100%;
+        padding: 12px;
+        border: 2px solid #e0e0e0;
+        border-radius: 6px;
+        font-size: 14px;
+        transition: all 0.3s ease;
+      }
+
+      input:focus,
+      select:focus {
+        outline: none;
+        border-color: #667eea;
+        box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+      }
+
+      .checkbox-group {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+
+      .checkbox-item {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .checkbox-item input[type="checkbox"] {
+        width: 18px;
+        height: 18px;
+        cursor: pointer;
+      }
+
+      .checkbox-item label {
+        margin: 0;
+        font-weight: 400;
+        cursor: pointer;
+      }
+
+      .error-message {
+        color: #e74c3c;
+        font-size: 13px;
+        margin-top: 5px;
+        padding: 8px;
+        background: #ffeaea;
+        border-left: 3px solid #e74c3c;
+        border-radius: 4px;
+      }
+
+      .success-field {
+        border-color: #27ae60 !important;
+      }
+
+      input.error-message,
+      select.error-message {
+        border-color: #e74c3c;
+      }
+
+      .button-group {
+        display: flex;
+        gap: 10px;
+        margin-top: 30px;
+      }
+
+      button {
+        flex: 1;
+        padding: 14px;
+        border: none;
+        border-radius: 6px;
+        font-size: 16px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.3s ease;
+      }
+
+      button[type="submit"] {
+        background: rgb(25, 149, 25);
+        color: white;
+      }
+
+      button[type="submit"]:hover {
+        box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+      }
+
+      button[type="button"] {
+        background: #95a5a6;
+        color: white;
+      }
+
+      button[type="button"]:hover {
+        background: #7f8c8d;
+      }
+
+      .info-box {
+        background: #e8f4f8;
+        border-left: 4px solid #3498db;
+        padding: 15px;
+        margin-bottom: 25px;
+        border-radius: 4px;
+      }
+
+      .info-box p {
+        font-size: 13px;
+        color: #2c3e50;
+        line-height: 1.6;
+      }
+
+      .info-box strong {
+        color: #3498db;
+      }
+    </style>
   </head>
   <body>
-    <main>
-      <section>
-        <form novalidate>
-          <label>Имя <input type="text" required></label>
-          <p role="alert" aria-live="assertive"></p>
+    <div class="container">
+      <h1>JustIlindate</h1>
+      <p class="subtitle">
+        Библиотека валидации форм с поддержкой Constraint Validation API
+      </p>
+
+      <div class="info-box">
+        <p>
+          <strong>Возможности:</strong> Автоматическая валидация на основе
+          HTML-атрибутов (required, minlength, maxlength, min, max, pattern,
+          type), добавление кастомных правил через JavaScript, валидация строк,
+          чисел и массивов (чекбоксы).
+        </p>
+      </div>
+
+      <form id="registration-form" novalidate>
+        <div class="form-group">
+          <label for="username">Имя пользователя</label>
+          <input
+            type="text"
+            id="username"
+            name="username"
+            required
+            minlength="3"
+            maxlength="20"
+            placeholder="Введите имя (3-20 символов)"
+          />
+        </div>
+
+        <div class="form-group">
+          <label for="email">Email</label>
+          <input
+            type="email"
+            id="email"
+            name="email"
+            required
+            placeholder="example@company.com"
+          />
+        </div>
+
+        <div class="form-group">
+          <label for="password">Пароль</label>
+          <input
+            type="password"
+            id="password"
+            name="password"
+            required
+            minlength="8"
+            placeholder="Минимум 8 символов"
+          />
+        </div>
+
+        <div class="form-group">
+          <label for="age">Возраст</label>
+          <input
+            type="number"
+            id="age"
+            name="age"
+            required
+            min="18"
+            max="100"
+            placeholder="От 18 до 100 лет"
+          />
+        </div>
+
+        <div class="form-group">
+          <label for="website">Веб-сайт</label>
+          <input
+            type="url"
+            id="website"
+            name="website"
+            placeholder="https://example.com (необязательно)"
+          />
+        </div>
+
+        <div class="form-group">
+          <label for="country">Страна</label>
+          <select id="country" name="country" required>
+            <option value="" disabled selected>Выберите страну</option>
+            <option value="russia">Россия</option>
+            <option value="ukraine">Украина</option>
+            <option value="belarus">Беларусь</option>
+            <option value="kazakhstan">Казахстан</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label>Интересы (выберите минимум 2, необязательное)</label>
+          <div class="checkbox-group">
+            <div class="checkbox-item">
+              <input
+                type="checkbox"
+                id="interest-coding"
+                name="interests"
+                value="coding"
+              />
+              <label for="interest-coding">Программирование</label>
+            </div>
+            <div class="checkbox-item">
+              <input
+                type="checkbox"
+                id="interest-design"
+                name="interests"
+                value="design"
+              />
+              <label for="interest-design">Дизайн</label>
+            </div>
+            <div class="checkbox-item">
+              <input
+                type="checkbox"
+                id="interest-music"
+                name="interests"
+                value="music"
+              />
+              <label for="interest-music">Музыка</label>
+            </div>
+            <div class="checkbox-item">
+              <input
+                type="checkbox"
+                id="interest-sports"
+                name="interests"
+                value="sports"
+              />
+              <label for="interest-sports">Спорт</label>
+            </div>
+          </div>
+        </div>
+
+        <div class="button-group">
           <button type="submit">Отправить</button>
-        </form>
-      </section>
-    </main>
+          <button type="button" id="reset-button">Сбросить</button>
+        </div>
+      </form>
+    </div>
+
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

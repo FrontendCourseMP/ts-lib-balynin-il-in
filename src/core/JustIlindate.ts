@@ -1,271 +1,304 @@
-import type { JustIlindateOptions, ValidationRule,  FieldConfig, ValidationResult, FieldMetaData, FieldError } from '../types/types';
-import { ErrorCollector } from './ErrorCollector';
-import { Validator } from './Validator';
-import { FieldManager } from '../ui/FieldManager';
-import { ErrorRenderer } from '../ui/ErrorRenderer';
-import { DOMHelpers } from '../utils/DOMHelpers';
-import { AttributeParser } from '../utils/AttributeParser';
+import type {
+  ValidatorOptions,
+  FieldState,
+  ValidationResult,
+  ValidationRule,
+  FieldValue,
+} from "../types";
+import {
+  getFieldValue,
+  getConstraintAttributes,
+  createErrorContainer,
+  findLabel,
+  isCheckboxOrRadioGroup,
+} from "../utils";
+import { validators, errorMessages, formatErrorMessage } from "../validators";
 
 export class JustIlindate {
   private form: HTMLFormElement;
-  private options: JustIlindateOptions;
-  
-  private errorCollector: ErrorCollector;
-  
-  private validator: Validator;
-  
-  private fieldManager: FieldManager;
-  private errorRenderer: ErrorRenderer;
-  
-  private fieldsMetadata: Map<string, FieldMetaData>;
-  
-  private customRules: Map<string, FieldConfig>;
+  private fields: Map<string, FieldState>;
+  private options: Required<ValidatorOptions>;
+  private processedCheckboxGroups: Set<string>;
 
-  constructor(form: HTMLFormElement | string, options: JustIlindateOptions = {}) {
-    this.form = typeof form === 'string' 
-      ? document.querySelector(form) as HTMLFormElement
-      : form;
-
-    if (!this.form || !(this.form instanceof HTMLFormElement)) {
-      throw new Error('JustIlin: Invalid form element provided');
-    }
-
+  constructor(
+    formSelector: string | HTMLFormElement,
+    options: ValidatorOptions = {}
+  ) {
+    this.fields = new Map();
+    this.processedCheckboxGroups = new Set();
     this.options = {
-      suppressWarnings: false,
-      validateOnBlur: false,
-      validateOnInput: false,
-      errorClass: 'justilin-error',
-      errorContainerClass: 'justilin-error-message',
-      locale: 'en',
-      ...options
+      suppressWarnings: options.suppressWarnings ?? false,
+      validateOnBlur: options.validateOnBlur ?? true,
+      validateOnInput: options.validateOnInput ?? false,
+      errorClass: options.errorClass ?? "justilindate-error",
+      successClass: options.successClass ?? "justilindate-success",
     };
 
-    this.fieldsMetadata = new Map();
-    this.customRules = new Map();
-    
-    this.errorCollector = new ErrorCollector(this.options.suppressWarnings);
-    
-    this.validator = new Validator(this.errorCollector);
-    
-    this.fieldManager = new FieldManager(this.form, this.options);
-    this.errorRenderer = new ErrorRenderer(this.options);
-
-    this.init();
-  }
-
-  /**
-   * Инициализация библиотеки
-   * Сканирует форму, собирает метаданные, настраивает обработчики
-   */
-  private init(): void {
-    try {
-      this.scanFormFields();
-
-      this.validateLabels();
-
-      this.parseHTMLAttributes();
-
-      this.setupEventListeners();
-
-      this.errorCollector.logWarnings();
-
-    } catch (error) {
-      console.error('JustIlin initialization error:', error);
-      throw error;
+    if (typeof formSelector === "string") {
+      const formElement = document.querySelector<HTMLFormElement>(formSelector);
+      if (!formElement) {
+        throw new Error(`Форма с селектором "${formSelector}" не найдена`);
+      }
+      this.form = formElement;
+    } else {
+      this.form = formSelector;
     }
+
+    this.validateFormStructure();
+    this.initializeFields();
+    this.attachEventListeners();
   }
 
-  /**
-   * Сканирование всех полей формы
-   * Создаёт FieldMetadata для каждого поля
-   */
-  private scanFormFields(): void {
-    const fields = DOMHelpers.getAllFormFields(this.form);
-    
-    fields.forEach(field => {
-      const fieldName = field.name || field.id;
-      
-      if (!fieldName) {
-        this.errorCollector.addWarning({
-          fieldName: 'unknown',
-          message: 'Field without name or id attribute found',
-          type: 'missing-label'
-        });
+  private validateFormStructure(): void {
+    const fields = this.form.querySelectorAll("input, select, textarea");
+
+    fields.forEach((field) => {
+      if (!field.getAttribute("name") && !field.getAttribute("id")) {
+        if (!this.options.suppressWarnings) {
+          // eslint-disable-next-line no-console
+          console.warn(
+            "JustIlindate: Поле без атрибутов name или id будет проигнорировано",
+            field
+          );
+        }
         return;
       }
 
-      const metadata: FieldMetaData = {
-        element: field,
-        label: DOMHelpers.findLabelForField(field),
-        type: DOMHelpers.getFieldType(field),
-        htmlAttributes: AttributeParser.parseAttributes(field),
-        jsRules: []
-      };
-
-      this.fieldsMetadata.set(fieldName, metadata);
-    });
-  }
-
-  /**
-   * Проверка наличия labels (Правило 1)
-   * Добавляет warning для полей без label
-   */
-  private validateLabels(): void {
-    this.fieldsMetadata.forEach((metadata, fieldName) => {
-      if (!metadata.label) {
-        this.errorCollector.addWarning({
-          fieldName,
-          message: `Field "${fieldName}" does not have an associated label`,
-          type: 'missing-label'
-        });
+      const label = findLabel(field as HTMLElement);
+      if (!label && !this.options.suppressWarnings) {
+        // eslint-disable-next-line no-console
+        console.warn(
+          `JustIlindate: Для поля "${field.getAttribute("name") || field.getAttribute("id")}" не найден label`,
+          field
+        );
       }
     });
   }
 
-  /**
-   * Парсинг HTML5 атрибутов валидации
-   * Конвертирует HTML атрибуты в ValidationRule[]
-   */
-  private parseHTMLAttributes(): void {
-    this.fieldsMetadata.forEach((metadata, fieldName) => {
-      const rulesFromAttrs = AttributeParser.convertAttributesToRules(
-        metadata.htmlAttributes
+  private initializeFields(): void {
+    const fields = this.form.querySelectorAll<
+      HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement
+    >("input, select, textarea");
+
+    fields.forEach((field) => {
+      const name = field.getAttribute("name") || field.getAttribute("id");
+      if (!name) return;
+
+      if (field instanceof HTMLInputElement && isCheckboxOrRadioGroup(field)) {
+        if (this.processedCheckboxGroups.has(name)) return;
+        this.processedCheckboxGroups.add(name);
+      }
+
+      const errorContainer = createErrorContainer(
+        field,
+        this.options.errorClass
       );
-      
-      metadata.jsRules = rulesFromAttrs;
+      const rules = this.buildRulesFromAttributes(field);
+
+      this.fields.set(name, {
+        element: field,
+        errorContainer,
+        isValid: true,
+        rules,
+      });
     });
   }
 
-  /**
-   * Настройка обработчиков событий
-   */
-  private setupEventListeners(): void {
-    this.form.addEventListener('submit', (e) => {
+  private buildRulesFromAttributes(
+    element: HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement
+  ): ValidationRule[] {
+    const rules: ValidationRule[] = [];
+    //TODO: здесь должны быть логика, которая считывает стандартные HTML5 атрибуты
+    // (типа `required`, `minlength`, `type="email"`) и
+    // автоматически преобразует их в объекты правил (`ValidationRule[]`) для поля.
+    return rules;
+  }
+
+  private attachEventListeners(): void {
+    this.fields.forEach((fieldState, name) => {
+      const elements = this.form.querySelectorAll<
+        HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement
+      >(`[name="${name}"]`);
+
+      elements.forEach((element) => {
+        if (this.options.validateOnBlur) {
+          element.addEventListener("blur", () => {
+            this.validateField(name);
+          });
+        }
+
+        const eventType =
+          element.type === "checkbox" || element.type === "radio"
+            ? "change"
+            : "input";
+
+        if (this.options.validateOnInput) {
+          element.addEventListener(eventType, () => {
+            if (!fieldState.isValid) {
+              this.validateField(name);
+            }
+          });
+        }
+      });
+    });
+
+    this.form.addEventListener("submit", (e) => {
       e.preventDefault();
       const result = this.validate();
-      
       if (result.isValid) {
-        this.form.submit();
+        this.onSuccess();
       }
     });
-
-    if (this.options.validateOnBlur) {
-      this.fieldsMetadata.forEach((metadata, fieldName) => {
-        metadata.element.addEventListener('blur', () => {
-          this.validateField(fieldName);
-        });
-      });
-    }
-
-    if (this.options.validateOnInput) {
-      this.fieldsMetadata.forEach((metadata, fieldName) => {
-        metadata.element.addEventListener('input', () => {
-          this.validateField(fieldName);
-        });
-      });
-    }
   }
 
-  /**
-   * Добавление правил валидации для поля
-   * Позволяет добавить JS правила поверх HTML атрибутов
-   */
-  public addField(fieldName: string, rules: ValidationRule[]): this {
-    const metadata = this.fieldsMetadata.get(fieldName);
-    
-    if (!metadata) {
-      throw new Error(`Field "${fieldName}" not found in form`);
+  public addRule(
+    fieldName: string,
+    validator: (value: FieldValue) => boolean,
+    errorMessage: string
+  ): this {
+    const fieldState = this.fields.get(fieldName);
+    if (!fieldState) {
+      throw new Error(`Поле "${fieldName}" не найдено`);
     }
 
-    AttributeParser.checkRulesConflict(
-      metadata.htmlAttributes,
-      rules,
-      fieldName,
-      this.errorCollector
-    );
+    const htmlAttrs = getConstraintAttributes(fieldState.element);
+    const hasConflict = this.checkRuleConflict(validator, htmlAttrs);
 
-    metadata.jsRules = [...metadata.jsRules, ...rules];
-    
-    this.customRules.set(fieldName, { fieldName, rules });
-    
+    if (hasConflict && !this.options.suppressWarnings) {
+      // eslint-disable-next-line no-console
+      console.warn(
+        `JustIlindate: Правило для поля "${fieldName}" конфликтует с HTML-атрибутами`,
+        { customRule: validator.toString(), htmlAttributes: htmlAttrs }
+      );
+    }
+
+    fieldState.rules.push({ validator, errorMessage });
     return this;
   }
 
-  /**
-   * Валидация конкретного поля
-   * Используется для validateOnBlur/validateOnInput и внутри validate()
-   */
-  private validateField(fieldName: string): ValidationResult {
-    const metadata = this.fieldsMetadata.get(fieldName);
-    
-    if (!metadata) {
-      return { isValid: true, errors: [] };
+  private checkRuleConflict(
+    validator: (value: FieldValue) => boolean,
+    attrs: Record<string, unknown>
+  ): boolean {
+    const validatorStr = validator.toString();
+
+    if (validatorStr.includes("required") && attrs.required !== undefined) {
+      return true;
+    }
+    if (
+      validatorStr.includes("length") &&
+      (attrs.minlength || attrs.maxlength)
+    ) {
+      return true;
+    }
+    if (validatorStr.includes("min") && attrs.min !== undefined) {
+      return true;
+    }
+    if (validatorStr.includes("max") && attrs.max !== undefined) {
+      return true;
     }
 
-    const value = this.fieldManager.getFieldValue(metadata.element, metadata.type);
-    
-    const errors = this.validator.validateValue(value, metadata.jsRules, metadata.type);
-
-    if (errors.length > 0) {
-      this.errorRenderer.showErrors(metadata.element, errors);
-      return { 
-        isValid: false, 
-        errors: [{ fieldName, errors }] 
-      };
-    } else {
-      this.errorRenderer.clearErrors(metadata.element);
-      return { 
-        isValid: true, 
-        errors: [] 
-      };
-    }
+    return false;
   }
 
-  /**
-   * Валидация всей формы
-   * Собирает ошибки со всех полей
-   */
-  public validate(): ValidationResult {
-    const allErrors: FieldError[] = [];
+  private validateField(fieldName: string): boolean {
+    const fieldState = this.fields.get(fieldName);
+    if (!fieldState) return true;
 
-    this.fieldsMetadata.forEach((metadata, fieldName) => {
-      const result = this.validateField(fieldName);
-      
-      if (!result.isValid) {
-        allErrors.push(...result.errors);
+    const value = getFieldValue(fieldState.element);
+    const errors: string[] = [];
+
+    const isRequired = fieldState.rules.some(
+      (rule) => rule.errorMessage === errorMessages.required
+    );
+
+    const isEmpty = this.isValueEmpty(value);
+
+    if (!isRequired && isEmpty) {
+      fieldState.isValid = true;
+      this.clearErrors(fieldState);
+      return true;
+    }
+
+    for (const rule of fieldState.rules) {
+      if (!rule.validator(value)) {
+        errors.push(rule.errorMessage);
+      }
+    }
+
+    fieldState.isValid = errors.length === 0;
+
+    if (errors.length > 0) {
+      this.showErrors(fieldState, errors);
+    } else {
+      this.clearErrors(fieldState);
+    }
+
+    return fieldState.isValid;
+  }
+
+  private isValueEmpty(value: FieldValue): boolean {
+    if (Array.isArray(value)) {
+      return value.length === 0;
+    }
+    if (typeof value === "number") {
+      return false;
+    }
+    return String(value).trim() === "";
+  }
+
+  private showErrors(fieldState: FieldState, errors: string[]): void {
+    fieldState.errorContainer.innerHTML = errors.join("<br>");
+    fieldState.errorContainer.style.display = "block";
+    fieldState.element.classList.add(this.options.errorClass);
+    fieldState.element.classList.remove(this.options.successClass);
+  }
+
+  private clearErrors(fieldState: FieldState): void {
+    //TODO: здесь должна быть логика, которая очищает контейнер ошибок, скрывает его и
+    // добавляет/удаляет классы успеха/ошибки с поля ввода,
+    // когда поле становится валидным.
+  }
+
+  public validate(): ValidationResult {
+    const errors: Record<string, string[]> = {};
+    let isValid = true;
+
+    this.fields.forEach((fieldState, name) => {
+      const fieldValid = this.validateField(name);
+      if (!fieldValid) {
+        isValid = false;
+        const fieldErrors: string[] = [];
+        const value = getFieldValue(fieldState.element);
+
+        for (const rule of fieldState.rules) {
+          if (!rule.validator(value)) {
+            fieldErrors.push(rule.errorMessage);
+          }
+        }
+        errors[name] = fieldErrors;
       }
     });
 
-    return {
-      isValid: allErrors.length === 0,
-      errors: allErrors
-    };
+    return { isValid, errors };
   }
 
-  /**
-   * Очистка всех ошибок валидации
-   */
-  public clearErrors(): void {
-    this.fieldsMetadata.forEach((metadata) => {
-      this.errorRenderer.clearErrors(metadata.element);
+  public reset(): void {
+    this.form.reset();
+    this.fields.forEach((fieldState) => {
+      fieldState.isValid = true;
+      this.clearErrors(fieldState);
     });
   }
 
-  /**
-   * Получение экземпляра Validator для регистрации кастомных валидаторов
-   */
-  public getValidator(): Validator {
-    return this.validator;
+  private onSuccess(): void {
+    const event = new CustomEvent("justilindate:success", {
+      detail: { form: this.form },
+    });
+    this.form.dispatchEvent(event);
   }
 
-  /**
-   * Уничтожение экземпляра
-   * Очищает всё, удаляет обработчики
-   */
-  public destroy(): void {
-    this.clearErrors();
-    this.fieldsMetadata.clear();
-    this.customRules.clear();
-    // потом надо добавить удаление event listeners
+  public onSuccessSubmit(callback: (event: Event) => void): void {
+    this.form.addEventListener("justilindate:success", callback);
   }
 }
