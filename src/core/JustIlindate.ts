@@ -108,132 +108,87 @@ export class JustIlindate {
     element: HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement
   ): ValidationRule[] {
     const rules: ValidationRule[] = [];
-    // required атрибут
-    if (element.hasAttribute("required")) {
+    const attrs = getConstraintAttributes(element);
+
+    if (attrs.required) {
       rules.push({
-        validator: (value: FieldValue) => !this.isValueEmpty(value),
+        validator: (value: FieldValue) => validators.required(value),
         errorMessage: errorMessages.required,
       });
     }
 
-    // Для input элементов с специфичными типами
-    if (element instanceof HTMLInputElement) {
-      const type = element.type.toLowerCase();
-
-      // email тип
-      if (type === "email") {
-        rules.push({
-          validator: (value: FieldValue) => {
-            if (this.isValueEmpty(value)) return true;
-            return validators.email(value);
-          },
-          errorMessage: errorMessages.email || "Пожалуйста, введите корректный email",
-        });
-      }
-
-      // url тип
-      if (type === "url") {
-        rules.push({
-          validator: (value: FieldValue) => {
-            if (this.isValueEmpty(value)) return true;
-            return validators.url(value);
-          },
-          errorMessage: errorMessages.url || "Пожалуйста, введите корректный URL",
-        });
-      }
-
-      // number тип
-      if (type === "number") {
-        // min атрибут
-        if (element.hasAttribute("min")) {
-          const min = parseFloat(element.getAttribute("min")!);
-          rules.push({
-            validator: (value: FieldValue) => {
-              if (this.isValueEmpty(value)) return true;
-              const num = parseFloat(String(value));
-              return !isNaN(num) && num >= min;
-            },
-            errorMessage: errorMessages.min || `Минимальное значение: ${min}`,
-          });
-        }
-
-        // max атрибут
-        if (element.hasAttribute("max")) {
-          const max = parseFloat(element.getAttribute("max")!);
-          rules.push({
-            validator: (value: FieldValue) => {
-              if (this.isValueEmpty(value)) return true;
-              const num = parseFloat(String(value));
-              return !isNaN(num) && num <= max;
-            },
-            errorMessage: errorMessages.max || `Максимальное значение: ${max}`,
-          });
-        }
-      }
-
-      // date, time типы тоже поддерживают min/max
-      if (["date", "time", "datetime-local"].includes(type)) {
-        if (element.hasAttribute("min")) {
-          const min = element.getAttribute("min")!;
-          rules.push({
-            validator: (value: FieldValue) => {
-              if (this.isValueEmpty(value)) return true;
-              return String(value) >= min;
-            },
-            errorMessage: errorMessages.min || `Минимальное значение: ${min}`,
-          });
-        }
-
-        if (element.hasAttribute("max")) {
-          const max = element.getAttribute("max")!;
-          rules.push({
-            validator: (value: FieldValue) => {
-              if (this.isValueEmpty(value)) return true;
-              return String(value) <= max;
-            },
-            errorMessage: errorMessages.max || `Максимальное значение: ${max}`,
-          });
-        }
-      }
-    }
-
-    // minlength атрибут (для input/textarea)
-    if ((element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement) && 
-        element.hasAttribute("minlength")) {
-      const minlength = parseInt(element.getAttribute("minlength")!, 10);
+    if (attrs.minlength) {
       rules.push({
-        validator: (value: FieldValue) => {
-          if (this.isValueEmpty(value)) return true;
-          return String(value).length >= minlength;
-        },
-        errorMessage: errorMessages.minlength || `Минимум ${minlength} символов`,
+        validator: (value: FieldValue) =>
+          validators.minLength(value, attrs.minlength),
+        errorMessage: formatErrorMessage(
+          errorMessages.minLength,
+          attrs.minlength
+        ),
       });
     }
 
-    // maxlength атрибут (для input/textarea)
-    if ((element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement) && 
-        element.hasAttribute("maxlength")) {
-      const maxlength = parseInt(element.getAttribute("maxlength")!, 10);
+    if (attrs.maxlength) {
       rules.push({
-        validator: (value: FieldValue) => {
-          return String(value).length <= maxlength;
-        },
-        errorMessage: errorMessages.maxlength || `Максимум ${maxlength} символов`,
+        validator: (value: FieldValue) =>
+          validators.maxLength(value, attrs.maxlength),
+        errorMessage: formatErrorMessage(
+          errorMessages.maxLength,
+          attrs.maxlength
+        ),
       });
     }
 
-    // pattern атрибут (для input элементов)
-    if (element instanceof HTMLInputElement && element.hasAttribute("pattern")) {
-      const pattern = element.getAttribute("pattern")!;
-      const regex = new RegExp(`^${pattern}$`);
+    if (attrs.min !== undefined) {
       rules.push({
-        validator: (value: FieldValue) => {
-          if (this.isValueEmpty(value)) return true;
-          return regex.test(String(value));
-        },
-        errorMessage: errorMessages.pattern || "Значение не соответствует требуемому формату",
+        validator: (value: FieldValue) => validators.min(value, attrs.min),
+        errorMessage: formatErrorMessage(errorMessages.min, attrs.min),
       });
     }
+
+    if (attrs.max !== undefined) {
+      rules.push({
+        validator: (value: FieldValue) => validators.max(value, attrs.max),
+        errorMessage: formatErrorMessage(errorMessages.max, attrs.max),
+      });
+    }
+
+    if (attrs.pattern) {
+      rules.push({
+        validator: (value: FieldValue) =>
+          validators.pattern(value, attrs.pattern),
+        errorMessage: errorMessages.pattern,
+      });
+    }
+
+    if (attrs.type === "email") {
+      rules.push({
+        validator: (value: FieldValue) => validators.email(value),
+        errorMessage: errorMessages.email,
+      });
+    }
+
+    if (attrs.type === "url") {
+      rules.push({
+        validator: (value: FieldValue) => validators.url(value),
+        errorMessage: errorMessages.url,
+      });
+    }
+
+    if (attrs.type === "number") {
+      rules.push({
+        validator: (value: FieldValue) => validators.number(value),
+        errorMessage: errorMessages.number,
+      });
+    }
+
+    if (attrs.step) {
+      rules.push({
+        validator: (value: FieldValue) => validators.step(value, attrs.step),
+        errorMessage: formatErrorMessage(errorMessages.step, attrs.step),
+      });
+    }
+
     return rules;
   }
 
@@ -384,7 +339,7 @@ export class JustIlindate {
 
     // Удаляем класс ошибки
     fieldState.element.classList.remove(this.options.errorClass);
-    
+
     // Добавляем класс успеха
     fieldState.element.classList.add(this.options.successClass);
   }
