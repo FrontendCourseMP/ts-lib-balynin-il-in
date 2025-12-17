@@ -106,8 +106,14 @@ export function createErrorContainer(
 
 export function findLabel(field: HTMLElement): HTMLLabelElement | null {
   const id = field.getAttribute("id");
+
   if (id) {
-    return document.querySelector<HTMLLabelElement>(`label[for="${id}"]`);
+    const labelByFor = document.querySelector<HTMLLabelElement>(
+      `label[for="${id}"]`
+    );
+    if (labelByFor) {
+      return labelByFor;
+    }
   }
 
   let parent = field.parentElement;

@@ -1,3 +1,5 @@
+// core/JustIlindate.ts
+
 import type {
   ValidatorOptions,
   FieldState,
@@ -80,6 +82,9 @@ export class JustIlindate {
       HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement
     >("input, select, textarea");
 
+    let errorContainer;
+    let rules;
+
     fields.forEach((field) => {
       const name = field.getAttribute("name") || field.getAttribute("id");
       if (!name) return;
@@ -87,13 +92,22 @@ export class JustIlindate {
       if (field instanceof HTMLInputElement && isCheckboxOrRadioGroup(field)) {
         if (this.processedCheckboxGroups.has(name)) return;
         this.processedCheckboxGroups.add(name);
+
+        // Для групп чекбоксов/радио используем первый элемент для создания контейнера
+        errorContainer = createErrorContainer(field, this.options.errorClass);
+        rules = this.buildRulesFromAttributes(field);
+
+        this.fields.set(name, {
+          element: field,
+          errorContainer,
+          isValid: true,
+          rules,
+        });
+        return;
       }
 
-      const errorContainer = createErrorContainer(
-        field,
-        this.options.errorClass
-      );
-      const rules = this.buildRulesFromAttributes(field);
+      errorContainer = createErrorContainer(field, this.options.errorClass);
+      rules = this.buildRulesFromAttributes(field);
 
       this.fields.set(name, {
         element: field,
@@ -193,32 +207,23 @@ export class JustIlindate {
   }
 
   private attachEventListeners(): void {
-    this.fields.forEach((fieldState, name) => {
-      const elements = this.form.querySelectorAll<
-        HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement
-      >(`[name="${name}"]`);
-
-      elements.forEach((element) => {
-        if (this.options.validateOnBlur) {
-          element.addEventListener("blur", () => {
-            this.validateField(name);
-          });
-        }
-
-        const eventType =
-          element.type === "checkbox" || element.type === "radio"
-            ? "change"
-            : "input";
-
-        if (this.options.validateOnInput) {
-          element.addEventListener(eventType, () => {
-            if (!fieldState.isValid) {
-              this.validateField(name);
-            }
-          });
-        }
+    if (this.options.validateOnBlur) {
+      this.fields.forEach((fieldState, name) => {
+        fieldState.element.addEventListener("blur", () => {
+          this.validateField(name);
+        });
       });
-    });
+    }
+
+    if (this.options.validateOnInput) {
+      this.fields.forEach((fieldState, name) => {
+        fieldState.element.addEventListener("input", () => {
+          if (!fieldState.isValid) {
+            this.validateField(name);
+          }
+        });
+      });
+    }
 
     this.form.addEventListener("submit", (e) => {
       e.preventDefault();
@@ -286,12 +291,15 @@ export class JustIlindate {
     const value = getFieldValue(fieldState.element);
     const errors: string[] = [];
 
+    // Проверяем, является ли поле обязательным
     const isRequired = fieldState.rules.some(
       (rule) => rule.errorMessage === errorMessages.required
     );
 
+    // Проверяем, пустое ли значение
     const isEmpty = this.isValueEmpty(value);
 
+    // Если поле необязательное и пустое, пропускаем все валидации
     if (!isRequired && isEmpty) {
       fieldState.isValid = true;
       this.clearErrors(fieldState);
@@ -333,14 +341,9 @@ export class JustIlindate {
   }
 
   private clearErrors(fieldState: FieldState): void {
-    // Очищаем контейнер ошибок
     fieldState.errorContainer.innerHTML = "";
     fieldState.errorContainer.style.display = "none";
-
-    // Удаляем класс ошибки
     fieldState.element.classList.remove(this.options.errorClass);
-
-    // Добавляем класс успеха
     fieldState.element.classList.add(this.options.successClass);
   }
 
